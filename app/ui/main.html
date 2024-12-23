@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>YT Downloader</title>
+  <link rel="stylesheet" href="../../node_modules/bootstrap/dist/css/bootstrap.min.css">
+  <link rel="stylesheet" href="../../node_modules/bootstrap-icons/font/bootstrap-icons.css">
+</head>
+
+<body>
+  <div id="overlay" class="d-flex h-100 w-100 justify-content-center align-items-center bg-secondary"
+    style="position: fixed; width: 100%; height: 100%;">
+    <div class="spinner-border text-white"></div>
+  </div>
+
+  <main class="d-none">
+    <div class="container-fluid mt-2">
+      <div class="row">
+        <div class="col">
+          <div class="card">
+            <div class="card-body">
+              <div class="input-group mb-3">
+                <span class="input-group-text fw-bold">URL</span>
+                <input type="text" class="form-control" id="url" placeholder="Enter Video URL">
+                <button class="btn btn-outline-primary" data-bs-toggle="tooltip" title="Copy URL From Clipboard"
+                  onclick="copyFromClipboard()">
+                  <i class="bi bi-clipboard-fill"></i>
+                </button>
+              </div>
+
+              <div class="input-group my-3">
+                <span class="input-group-text fw-bold">Filter</span>
+                <select class="form-select" id="filter" onchange="changeOptions()">
+                  <option value="audioandvideo" selected>Audio and Video</option>
+                  <option value="videoonly">Video Only</option>
+                  <option value="audioonly">Audio Only</option>
+                  <option value="mergevideo">Merge Video</option>
+                </select>
+              </div>
+
+              <div class="input-group my-3">
+                <span class="input-group-text fw-bold">Quality</span>
+                <select class="form-select" id="quality">
+                </select>
+              </div>
+
+              <div class="input-group my-3">
+                <span class="input-group-text fw-bold">Formats</span>
+                <select class="form-select" id="format">
+                </select>
+              </div>
+
+              <div class="input-group my-3">
+                <span class="input-group-text fw-bold">Subtitle</span>
+                <div class="input-group-text">
+                  <input type="checkbox" id="subtitle" disabled>
+                </div>
+                <span class="input-group-text fw-bold">Thumbnail</span>
+                <div class="input-group-text">
+                  <input type="checkbox" id="thumbnail" disabled>
+                </div>
+              </div>
+
+              <div class="d-flex justify-content-center">
+                <button class="btn btn-primary fw-bold" onclick="downloadVideo()" id="btn-download">Download</button>
+              </div>
+
+            </div>
+          </div>
+
+          <div class="card my-3 d-none" id="progress-div">
+            <div class="card-body">
+              <div class="d-flex flex-column">
+                <div class="progress my-3" style="height: 20px;">
+                  <div class="progress-bar progress-bar-striped progress-bar-animated" style="width:0%"></div>
+                </div>
+                <div class="fw-bold">
+                  Downloaded <span id="current"></span> of <span id="total"></span>
+                </div>
+                <div class="fw-bold">
+                  Download Speed: <span id="speed"></span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+  </main>
+</body>
+
+<script src="../../node_modules/bootstrap/dist/js/bootstrap.bundle.min.js"></script>
+<script src="scripts/youtube.js"></script>
+<script>
+  const url = document.getElementById('url');
+  const filter = document.getElementById('filter');
+  const quality = document.getElementById('quality');
+  const format = document.getElementById('format');
+  const subtitle = document.getElementById('subtitle');
+  const thumbnail = document.getElementById('thumbnail');
+  const btnDownload = document.getElementById('btn-download');
+
+  const progressDiv = document.getElementById('progress-div');
+  const progressBar = progressDiv.querySelector('.progress-bar');
+  const current = progressDiv.querySelector('#current');
+  const total = progressDiv.querySelector('#total');
+  const speed = progressDiv.querySelector('#speed');
+
+  function disable(elements) {
+    elements.forEach(el => el.setAttribute('disabled', 'disabled'));
+  }
+
+  function enable(elements) {
+    elements.forEach(el => el.removeAttribute('disabled'));
+  }
+
+  function copyFromClipboard() {
+    navigator.clipboard.readText().then(text => {
+      if (isValidYouTubeUrl(text)) {
+        url.value = text.trim();
+      }
+    });
+  }
+
+  function changeOptions() {
+    quality.innerHTML = format.innerHTML = '';
+    subtitle.checked = false;
+    thumbnail.checked = false;
+    switch (filter.value) {
+      case 'audioandvideo':
+      case 'videoonly':
+      case 'audioonly':
+        videoFilters.audioandvideo.quality.forEach(q => quality.add(new Option(q, q)));
+        videoFilters.audioandvideo.format.forEach(f => format.add(new Option(f, f)));
+        disable([subtitle, thumbnail]);
+        break;
+      case 'mergevideo':
+        videoFilters.mergevideo.quality.forEach(q => quality.add(new Option(q, q)));
+        videoFilters.mergevideo.format.forEach(f => format.add(new Option(f, f)));
+        enable([subtitle, thumbnail]);
+        break;
+    }
+  }
+
+  function downloadVideo() {
+    if (isValidYouTubeUrl(url.value.trim())) {
+      disable([url, filter, quality, format, subtitle, thumbnail, btnDownload]);
+      const data = {
+        url: url.value.trim(),
+        filter: filter.value,
+        quality: quality.value,
+        format: format.value,
+      };
+      if (filter.value === 'mergevideo') {
+        data.embedSubs = subtitle.checked;
+        data.embedThumbnail = thumbnail.checked;
+      }
+      window.electronAPI.downloadVideo(data);
+    } else {
+      alert('Invalid YouTube URL');
+    }
+  }
+
+  // show progress bar update
+  electronAPI.onDownloadProgress((data) => {
+    switch (data.status) {
+      case 'downloading':
+        progressDiv.classList.contains('d-none') && progressDiv.classList.remove('d-none');
+        progressBar.style.width = `${data.percentage}%`;
+        current.textContent = data.downloaded_str;
+        total.textContent = data.total_str;
+        speed.textContent = data.speed_str;
+        break;
+      case 'finished':
+        alert('Download Completed');
+        setTimeout(() => {
+          progressDiv.classList.add('d-none');
+          progressBar.style.width = `0%`;
+          enable(
+            filter.value === 'mergevideo' ?
+              [url, filter, quality, format, subtitle, thumbnail, btnDownload] :
+              [url, filter, quality, format, btnDownload]
+          );
+        }, 2000);
+        break;
+    }
+  });
+
+  // show error message on download error
+  electronAPI.onDownloadError((error) => {
+    alert(error);
+    enable(
+      filter.value === 'mergevideo' ?
+        [url, filter, quality, format, subtitle, thumbnail, btnDownload] :
+        [url, filter, quality, format, btnDownload]
+    );
+  });
+
+
+  document.addEventListener('DOMContentLoaded', () => {
+    // for tooltip
+    const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+    const tooltipList = tooltipTriggerList.map(tooltipTriggerEl => new bootstrap.Tooltip(tooltipTriggerEl));
+
+    changeOptions();
+
+    // remove overlay
+    setTimeout(() => document.querySelectorAll('#overlay, main').forEach(el => el.classList.toggle('d-none')), 500);
+  });
+</script>
+
+</html>
